@@ -2,6 +2,7 @@ import os
 from PIL import Image
 import random
 import matplotlib.pyplot as plt
+import numpy as np
 
 
 IMAGE_PATH = 'middle_fmr'
@@ -30,4 +31,25 @@ print(f'Total size of dataset for learning is {len(data_labels)} files')
 # let's check it out:
 print('Paths are: ', data_files[1085:1090])
 print('Their labels are: ', data_labels[1085:1090])
+# Time to transform datasets into np.arrays for learning:
+IMG_WIDTH = 128  # bringing imgs to one size
+IMG_HEIGHT = 64
+data_images = []  # empty list for imgs
+for file_name in data_files:
+    img = Image.open(file_name).resize((IMG_WIDTH, IMG_HEIGHT))  # opening and resizing every img
+    img_np = np.array(img)  # into numpy array
+    data_images.append(img_np)  # adding to the empty list of images
+x_data = np.array(data_images)  # img list to numpy array
+y_data = np.array(data_labels)  # labels list to numpy array
+# checking if everything is ok:
+print(f'We gathered in array {len(data_images)} photos shaped as following: {img_np.shape}')
+print(f'The img-dataset-ready-4-learning is shaped like that: {x_data.shape}')
+print(f'The label-dataset-ready-4-learning is shaped like that: {y_data.shape}')
+
+# now we bring the data in img-dataset to be in range (0,1),
+# 'cause right now they look like following:
+# print(x_data[0])
+x_data = x_data/255.  # now everything is ready for the learning!
+
+
 
