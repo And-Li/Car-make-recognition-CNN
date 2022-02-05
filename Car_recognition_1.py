@@ -1,5 +1,6 @@
+import math
 import os
-from PIL import Image
+from PIL import Image, ImageEnhance
 import random
 import matplotlib.pyplot as plt
 import numpy as np
@@ -126,17 +127,18 @@ def show_image_pair(img1, img2):
     plt.show()
 
 
-show_image(img)
+# show_image(img)
 
 img_ = img.resize((256, 128))
 print('The size of resized image is', img_.size)
-show_image(img_)
+# show_image(img_)
 # cropping the image: .crop takes 1 argument of tuple of 4: coordinates of left upper corner and right lower corner
 img_crop = img_.crop((20, 10, 200, 100))
-show_image(img_crop)
+# show_image(img_crop)
 print(img_crop.size)
 
-
+# just tried some img augmentation
+'''
 # random image crop function:
 def random_crop(x,  # img
                 f_x,  # limits of cropping in axis X
@@ -172,9 +174,129 @@ def rotated_rect(w, h, angle):
         cos_2a = cos_a * cos_a - sin_a * sin_a
         wr, hr = (w * cos_a - h * sin_a) / cos_2a, (h * cos_a - w * sin_a) / cos_2a
     return wr, hr
+'''
 
 
-crop_w, crop_h = rotated_rect(img_width, img_height, angle)
+# total augmentation function: to enlarge and enhance img quality and quantity
+# taken from www.neural-university.ru
+def augment_image(img,  # Изображение для аугментации
+                  ang=8,  # Максимальный угол поворота
+                  f_x=0.15,  # Максимальная подрезка по ширине
+                  f_y=0.15,  # Максимальная подрезка по высоте
+                  level_contr=0.3,  # Максимальное отклонение коэффициента контраста от нормы
+                  level_brght=0.3):  # Максимальное отклонение коэффициента яркости от нормы
+
+    # Функция нахождения ширины и высоты прямоугольника наибольшей площади
+    # после поворота заданного прямоугольника на угол в градусах
+
+    def rotated_rect(w, h, angle):
+        angle = math.radians(angle)
+        width_is_longer = w >= h
+        side_long, side_short = (w, h) if width_is_longer else (h, w)
+
+        sin_a, cos_a = abs(math.sin(angle)), abs(math.cos(angle))
+        if side_short <= 2. * sin_a * cos_a * side_long or abs(sin_a - cos_a) < 1e-10:
+            x = 0.5 * side_short
+            wr, hr = (x / sin_a, x / cos_a) if width_is_longer else (x / cos_a, x / sin_a)
+        else:
+            cos_2a = cos_a * cos_a - sin_a * sin_a
+            wr, hr = (w * cos_a - h * sin_a) / cos_2a, (h * cos_a - w * sin_a) / cos_2a
+
+        return wr, hr
+
+    # Функция случайной обрезки
+
+    def random_crop(x,  # Подаваемое изображение
+                    f_x=f_x,  # Предел обрезки справа и слева (в масштабе ширины)
+                    f_y=f_x  # Предел обрезки сверху и снизу (в масштабе высоты)
+                    ):
+
+        # Получение левой и правой границ обрезки
+        left = x.width * random.random() * f_x
+        right = x.width * (1. - random.random() * f_x) - 1.
+
+        # Получение верхней и нижней границ обрезки
+        upper = x.height * random.random() * f_y
+        lower = x.height * (1. - random.random() * f_y) - 1.
+
+        return x.crop((left, upper, right, lower))
+
+    # Функция случайного поворота
+
+    def random_rot(x,  # Подаваемое изображение
+                   ang=ang  # Максимальный угол поворота
+                   ):
+
+        # Случайное значение угла в диапазоне [-ang, ang]
+        a = random.uniform(-1., 1.) * ang
+
+        # Вращение картинки с расширением рамки
+        r = x.rotate(a, expand=True)
+
+        # Вычисление размеров прямоугольника обрезки максимальной площади
+        # для размеров исходной картинки и угла поворота в градусах
+        crop_w, crop_h = rotated_rect(x.width, x.height, a)
+
+        # Обрезка повернутого изображения и возврат результата
+        w, h = r.size
+        return r.crop(((w - crop_w) * 0.5, (h - crop_h) * 0.5,
+                       (w + crop_w) * 0.5, (h + crop_h) * 0.5))
+
+    # Функция отражения
+
+    def trans_img(x):
+        return x.transpose(Image.FLIP_LEFT_RIGHT)
+
+    # Функция случайного изменения контрастности
+
+    def random_contrast(x,  # Подаваемое изображение
+                        level=level_contr  # Максимальное отклонение коэффициента контраста от нормы - число от 0. до 1.
+                        ):
+
+        enh = ImageEnhance.Contrast(x)  # Создание экземпляра класса Contrast
+        factor = random.uniform(1. - level,
+                                1. + level)  # Cлучайный коэффициент контраста из указанного интервала
+
+        return enh.enhance(factor)  # Изменение коэффициента контраста
+
+    # Функция случайного изменения яркости
+
+    def random_brightness(x,  # Подаваемое изображение
+                          level=level_brght  # Максимальное отклонение коэффициента яркости от нормы - число от 0. до 1.
+                          ):
+
+        enh = ImageEnhance.Brightness(x)  # Создание экземпляра класса Brightness
+        factor = random.uniform(1. - level,
+                                1. + level)  # Cлучайный коэффициент контраста из указанного интервала
+
+        return enh.enhance(factor)  # Изменение коэффициента яркости
+
+    # Тело основной функции
+
+    # Cоздание списка модификаций
+    mod_oper = [random_rot,
+                random_crop,
+                trans_img,
+                random_contrast,
+                random_brightness]
+
+    # Cлучайное количество изменений из списка; минимум одно изменение
+    mod_count = random.randrange(len(mod_oper) + 1)
+
+    # Случайный отбор индексов изменений в количестве mod_count без повторений
+    mod_list = random.sample(range(len(mod_oper)), mod_count)
+
+    # Применение модификаций по индексам из mod_list
+    for mod_index in mod_list:
+        img = mod_oper[mod_index](img)
+
+    # Возврат результата
+    return img
+
+
+for _ in range(5):
+    img_new = augment_image(img_)
+    show_image_pair(img_, img_new)
 
 
 
